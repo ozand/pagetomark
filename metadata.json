@@ -1,0 +1,5 @@
+{
+  "name": "PageToMark",
+  "description": "A client-side tool to convert web pages into clean, readable Markdown files using Mozilla Readability and Turndown.",
+  "requestFramePermissions": []
+}

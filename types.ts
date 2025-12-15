@@ -1,0 +1,25 @@
+export interface ParsedResult {
+  title: string;
+  byline: string | null;
+  dir: string | null;
+  content: string; // HTML content
+  textContent: string;
+  length: number;
+  excerpt: string | null;
+  siteName: string | null;
+}
+
+export interface ConversionResult {
+  markdown: string;
+  title: string;
+  url: string;
+  timestamp: string;
+}
+
+export enum LoadingState {
+  IDLE = 'IDLE',
+  FETCHING = 'FETCHING',
+  PARSING = 'PARSING',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR'
+}
