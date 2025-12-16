@@ -4,6 +4,7 @@ import { InputForm } from './components/InputForm';
 import { ResultViewer } from './components/ResultViewer';
 import { LinksList } from './components/LinksList';
 import { convertUrlToMarkdown } from './services/converter';
+import { isYouTubeUrl, getYouTubeTranscript } from './services/youtube';
 import { LoadingState, ConversionResult, ProcessedLink } from './types';
 
 const App: React.FC = () => {
@@ -25,7 +26,15 @@ const App: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      const data = await convertUrlToMarkdown(url);
+      let data: ConversionResult;
+      
+      // Check if it's a YouTube URL
+      if (isYouTubeUrl(url)) {
+        data = await getYouTubeTranscript(url);
+      } else {
+        data = await convertUrlToMarkdown(url);
+      }
+      
       setLinks(prev => prev.map(link =>
         link.id === linkId
           ? { ...link, status: 'completed', result: data }

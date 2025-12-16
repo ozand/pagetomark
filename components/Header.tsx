@@ -12,7 +12,7 @@ export const Header: React.FC = () => {
         Page<span className="text-indigo-600">To</span>Mark
       </h1>
       <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-        Convert any web article into clean Markdown for reading, archiving, or LLM context.
+        Convert any web article or YouTube transcript into clean Markdown for reading, archiving, or LLM context.
         Powered by <span className="font-medium text-slate-800">Readability.js</span> and <span className="font-medium text-slate-800">Turndown</span>.
       </p>
     </header>

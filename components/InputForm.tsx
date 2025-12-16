@@ -42,7 +42,7 @@ export const InputForm: React.FC<InputFormProps> = ({ onConvert, loadingState })
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste article URL here (e.g., https://example.com/article)"
+            placeholder="Paste article or YouTube URL here (e.g., https://example.com/article)"
             className="flex-1 p-4 bg-transparent border-none focus:ring-0 text-slate-800 placeholder-slate-400 text-lg outline-none w-full"
             disabled={isBusy}
           />
