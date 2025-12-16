@@ -27,14 +27,14 @@ const App: React.FC = () => {
 
     try {
       let data: ConversionResult;
-      
+
       // Check if it's a YouTube URL
       if (isYouTubeUrl(url)) {
         data = await getYouTubeTranscript(url);
       } else {
         data = await convertUrlToMarkdown(url);
       }
-      
+
       setLinks(prev => prev.map(link =>
         link.id === linkId
           ? { ...link, status: 'completed', result: data }

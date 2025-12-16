@@ -16,7 +16,7 @@ export const InputForm: React.FC<InputFormProps> = ({ onConvert, loadingState })
       setError('Please enter a valid URL');
       return;
     }
-    
+
     try {
       new URL(url); // Validate URL format
       setError(null);
@@ -49,11 +49,10 @@ export const InputForm: React.FC<InputFormProps> = ({ onConvert, loadingState })
           <button
             type="submit"
             disabled={isBusy}
-            className={`px-6 py-3 rounded-md text-white font-medium transition-all duration-200 shadow-lg ${
-              isBusy 
-                ? 'bg-slate-400 cursor-not-allowed' 
+            className={`px-6 py-3 rounded-md text-white font-medium transition-all duration-200 shadow-lg ${isBusy
+                ? 'bg-slate-400 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-500/30'
-            }`}
+              }`}
           >
             {isBusy ? (
               <span className="flex items-center gap-2">
