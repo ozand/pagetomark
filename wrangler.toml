@@ -3,3 +3,9 @@ compatibility_date = "2025-12-16"
 
 [assets]
 directory = "./dist"
+
+# YouTube transcript proxy worker
+[[workers]]
+name = "youtube-transcript-proxy"
+main = "./workers/youtube-proxy.js"
+compatibility_date = "2025-12-16"

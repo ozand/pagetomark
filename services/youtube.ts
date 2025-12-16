@@ -44,85 +44,73 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
             throw new Error('Invalid YouTube URL. Could not extract video ID.');
         }
 
-        // Try multiple methods to get transcript
         let transcriptItems: TranscriptItem[] = [];
         let videoTitle = 'YouTube Video Transcript';
 
-        // Method 1: Try using a public transcript API service
+        // Helper to wrap URL in a CORS proxy
+        const proxyUrl = (targetUrl: string) => 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+
         try {
-            const apiUrl = `https://youtube-transcriptor.herokuapp.com/transcript?videoId=${videoId}`;
-            const response = await fetch(apiUrl);
-            
-            if (response.ok) {
-                const data = await response.json();
-                if (data && Array.isArray(data)) {
-                    transcriptItems = data.map((item: any) => ({
-                        start: item.start || item.offset / 1000,
-                        duration: item.duration || item.dur,
-                        text: item.text
-                    }));
-                    console.log('Method 1: Got transcript from API service');
-                }
-            }
-        } catch (error) {
-            console.warn('Method 1 failed:', error);
-        }
+            // 1. Fetch Video Page
+            const videoPageRes = await fetch(proxyUrl(`https://www.youtube.com/watch?v=${videoId}`));
+            const videoPageHtml = await videoPageRes.text();
 
-        // Method 2: Try timedtext API with multiple languages through proxy
-        if (transcriptItems.length === 0) {
-            const languages = ['en', 'en-US', 'ru', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'pt', 'ar', 'hi', 'it', 'pl', 'nl', 'tr'];
-            
-            for (const lang of languages) {
-                if (transcriptItems.length > 0) break;
-                
-                const transcriptUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=srv3`;
-                
-                // Try without proxy first (sometimes works)
-                try {
-                    const response = await fetch(transcriptUrl);
-                    if (response.ok) {
-                        const xml = await response.text();
-                        if (xml && (xml.includes('<transcript>') || xml.includes('<text'))) {
-                            transcriptItems = parseTranscriptXml(xml);
-                            console.log(`Method 2a: Got transcript in ${lang} without proxy`);
-                            break;
-                        }
-                    }
-                } catch (e) {
-                    // Continue to proxy method
-                }
-                
-                // Try with proxies
-                const proxies = [
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(transcriptUrl)}`,
-                    `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`,
-                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(transcriptUrl)}`
-                ];
-                
-                for (const proxyUrl of proxies) {
-                    try {
-                        const response = await fetch(proxyUrl);
-                        if (response.ok) {
-                            const xml = await response.text();
-                            if (xml && (xml.includes('<transcript>') || xml.includes('<text'))) {
-                                transcriptItems = parseTranscriptXml(xml);
-                                console.log(`Method 2b: Got transcript in ${lang} via proxy`);
-                                break;
-                            }
-                        }
-                    } catch (error) {
-                        // Try next proxy
-                    }
-                }
+            // Extract video title
+            const titleMatch = videoPageHtml.match(/<title>(.+?)<\/title>/);
+            if (titleMatch) {
+                videoTitle = titleMatch[1].replace(' - YouTube', '').trim();
             }
+
+            // 2. Extract Captions JSON
+            const captionMatch = videoPageHtml.match(/"captionTracks":(\[.*?\])/);
+            
+            if (!captionMatch) {
+                // Check for common error cases
+                if (videoPageHtml.includes('class="g-recaptcha"')) {
+                    throw new Error("YouTube is asking for a captcha. Please try again later.");
+                }
+                if (videoPageHtml.includes('"playabilityStatus":{"status":"ERROR"')) {
+                    throw new Error("Video is unavailable or private.");
+                }
+                throw new Error("No captions found for this video.");
+            }
+
+            const tracks = JSON.parse(captionMatch[1]);
+
+            // 3. Select Track (English preferred, or first available)
+            const track = 
+                tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || // Manual English
+                tracks.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') || // Auto English
+                tracks[0]; // Fallback
+
+            if (!track) {
+                throw new Error("No usable caption track found.");
+            }
+
+            // 4. Fetch Transcript XML
+            const transcriptRes = await fetch(proxyUrl(track.baseUrl));
+            const transcriptXml = await transcriptRes.text();
+
+            // 5. Parse XML using DOMParser
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(transcriptXml, "text/xml");
+            const texts = doc.getElementsByTagName('text');
+
+            transcriptItems = Array.from(texts).map(text => ({
+                text: text.textContent || '',
+                duration: parseFloat(text.getAttribute('dur') || '0'),
+                start: parseFloat(text.getAttribute('start') || '0')
+            }));
+
+            console.log('Got transcript successfully');
+
+        } catch (error: any) {
+            console.error('Manual Transcript Fetch Error:', error);
+            throw new Error(`Failed to fetch transcript: ${error.message}`);
         }
 
         if (!transcriptItems || transcriptItems.length === 0) {
-            throw new Error('No transcript available for this video. The video may not have captions enabled, or captions cannot be accessed due to restrictions.');
-        }
-
-        if (!transcriptItems || transcriptItems.length === 0) {
-            throw new Error('Failed to parse transcript data.');
+            throw new Error('No transcript data found.');
         }
 
         // Build markdown content
@@ -166,53 +154,6 @@ date: ${dateStr}
         console.error('YouTube transcript error:', error);
         throw new Error(`Failed to fetch YouTube transcript: ${error.message || 'Unknown error'}`);
     }
-};
-
-/**
- * Parse YouTube transcript XML
- */
-const parseTranscriptXml = (xml: string): TranscriptItem[] => {
-    const items: TranscriptItem[] = [];
-
-    // Try multiple XML patterns
-    // Pattern 1: <text start="..." dur="...">text</text>
-    let textMatches = xml.matchAll(/<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]*)<\/text>/g);
-    
-    for (const match of textMatches) {
-        items.push({
-            start: parseFloat(match[1]),
-            duration: parseFloat(match[2]),
-            text: match[3]
-        });
-    }
-    
-    // Pattern 2: <text start="..." d="...">text</text> (alternative format)
-    if (items.length === 0) {
-        textMatches = xml.matchAll(/<text start="([^"]+)" d="([^"]+)"[^>]*>([^<]*)<\/text>/g);
-        
-        for (const match of textMatches) {
-            items.push({
-                start: parseFloat(match[1]),
-                duration: parseFloat(match[2]),
-                text: match[3]
-            });
-        }
-    }
-    
-    // Pattern 3: <text t="..." d="...">text</text>
-    if (items.length === 0) {
-        textMatches = xml.matchAll(/<text t="([^"]+)" d="([^"]+)"[^>]*>([^<]*)<\/text>/g);
-        
-        for (const match of textMatches) {
-            items.push({
-                start: parseFloat(match[1]) / 1000, // Convert ms to seconds
-                duration: parseFloat(match[2]) / 1000,
-                text: match[3]
-            });
-        }
-    }
-    
-    return items;
 };
 
 /**
