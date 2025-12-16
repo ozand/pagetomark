@@ -26,17 +26,17 @@ const App: React.FC = () => {
 
     try {
       const data = await convertUrlToMarkdown(url);
-      setLinks(prev => prev.map(link => 
-        link.id === linkId 
-          ? { ...link, status: 'completed', result: data } 
+      setLinks(prev => prev.map(link =>
+        link.id === linkId
+          ? { ...link, status: 'completed', result: data }
           : link
       ));
       setSelectedLinkId(linkId);
       setLoadingState(LoadingState.SUCCESS);
     } catch (error: any) {
-      setLinks(prev => prev.map(link => 
-        link.id === linkId 
-          ? { ...link, status: 'error', error: error.message } 
+      setLinks(prev => prev.map(link =>
+        link.id === linkId
+          ? { ...link, status: 'error', error: error.message }
           : link
       ));
       setLoadingState(LoadingState.ERROR);
@@ -89,12 +89,12 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <Header />
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
           {/* Left Column */}
           <div>
             <InputForm onConvert={handleConvert} loadingState={loadingState} />
-            
+
             {links.length > 0 && (
               <div className="mt-6">
                 <button
@@ -163,7 +163,7 @@ const App: React.FC = () => {
             ) : null}
           </div>
         </div>
-        
+
         <footer className="mt-16 text-center text-slate-400 text-sm">
           <p>&copy; {new Date().getFullYear()} PageToMark. Runs entirely in your browser.</p>
         </footer>
