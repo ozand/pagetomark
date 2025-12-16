@@ -3,9 +3,12 @@ import { ConversionResult } from '../types';
 
 interface ResultViewerProps {
   result: ConversionResult;
+  onDownloadAll?: () => void;
+  showDownloadAll?: boolean;
+  completedCount?: number;
 }
 
-export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
+export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAll, showDownloadAll, completedCount }) => {
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<'markdown' | 'rendered'>('markdown');
 
@@ -23,7 +26,7 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
     const blob = new Blob([result.markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    
+
     // Create a safe filename
     const safeTitle = result.title.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50);
     link.href = url;
@@ -36,6 +39,55 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
 
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in-up">
+      {/* Toolbar above preview */}
+      {showDownloadAll && (
+        <div className="mb-4 flex gap-2 justify-end">
+          <button
+            onClick={onDownloadAll}
+            disabled={!completedCount || completedCount === 0}
+            style={{
+              padding: '0.75rem 1.5rem',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              backgroundColor: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: !completedCount || completedCount === 0 ? 'not-allowed' : 'pointer',
+              opacity: !completedCount || completedCount === 0 ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            📥 Скачать все ({completedCount || 0})
+          </button>
+          
+          <button
+            onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              backgroundColor: 'white',
+              color: '#374151',
+              border: '1px solid #d1d5db',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '1rem', height: '1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {viewMode === 'markdown' ? 'Превью' : 'Markdown'}
+          </button>
+        </div>
+      )}
+      
       <div className="bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[70vh]">
         {/* Toolbar */}
         <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -47,26 +99,14 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
               Generated: {result.timestamp}
             </span>
           </div>
-          
+
           <div className="flex gap-2">
             <button
-              onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              {viewMode === 'markdown' ? 'Превью' : 'Markdown'}
-            </button>
-            
-             <button
               onClick={handleCopy}
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${
-                copied
+              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${copied
                   ? 'bg-green-100 text-green-700 hover:bg-green-200 focus:ring-green-500'
                   : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-indigo-500'
-              }`}
+                }`}
             >
               {copied ? (
                 <>
@@ -107,7 +147,7 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
               spellCheck={false}
             />
           ) : (
-            <div 
+            <div
               className="prose prose-slate max-w-none p-6 h-full overflow-auto"
               dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(result.markdown) }}
             />
@@ -121,40 +161,40 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
 // Simple markdown to HTML converter
 function convertMarkdownToHtml(markdown: string): string {
   let html = markdown;
-  
+
   // Headers
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-  
+
   // Bold
   html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
-  
+
   // Italic
   html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
-  
+
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-  
+
   // Images
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" />');
-  
+
   // Code blocks
   html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
-  
+
   // Inline code
   html = html.replace(/`([^`]+)`/gim, '<code>$1</code>');
-  
+
   // Lists
   html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
   html = html.replace(/(<li>.*<\/li>)/gis, '<ul>$1</ul>');
-  
+
   // Paragraphs
   html = html.replace(/\n\n/gim, '</p><p>');
   html = '<p>' + html + '</p>';
-  
+
   // Line breaks
   html = html.replace(/\n/gim, '<br>');
-  
+
   return html;
 }

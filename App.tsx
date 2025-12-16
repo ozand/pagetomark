@@ -106,29 +106,6 @@ const App: React.FC = () => {
 
           {/* Right Column */}
           <div>
-            {links.length > 0 && (
-              <div className="mb-4">
-                <button
-                  onClick={handleDownloadAll}
-                  disabled={links.filter(l => l.status === 'completed').length === 0}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: links.filter(l => l.status === 'completed').length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: links.filter(l => l.status === 'completed').length === 0 ? 0.5 : 1
-                  }}
-                >
-                  📥 Скачать все ({links.filter(l => l.status === 'completed').length})
-                </button>
-              </div>
-            )}
-            
             {loadingState === LoadingState.ERROR && errorMessage && (
               <div className="w-full mb-8 p-4 bg-red-50 border-l-4 border-red-500 rounded-md">
                 <div className="flex">
@@ -147,7 +124,12 @@ const App: React.FC = () => {
             )}
 
             {selectedResult ? (
-              <ResultViewer result={selectedResult} />
+              <ResultViewer 
+                result={selectedResult} 
+                onDownloadAll={handleDownloadAll}
+                showDownloadAll={links.length > 0}
+                completedCount={links.filter(l => l.status === 'completed').length}
+              />
             ) : links.length > 0 ? (
               <div style={{
                 padding: '2rem',
