@@ -95,6 +95,30 @@ const App: React.FC = () => {
           <div>
             <InputForm onConvert={handleConvert} loadingState={loadingState} />
 
+            {links.length > 0 && (
+              <div className="mt-6">
+                <button
+                  onClick={handleDownloadAll}
+                  disabled={links.filter(l => l.status === 'completed').length === 0}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: links.filter(l => l.status === 'completed').length === 0 ? 'not-allowed' : 'pointer',
+                    opacity: links.filter(l => l.status === 'completed').length === 0 ? 0.5 : 1,
+                    marginBottom: '0.5rem'
+                  }}
+                >
+                  📥 Скачать все ({links.filter(l => l.status === 'completed').length})
+                </button>
+              </div>
+            )}
+
             <LinksList
               links={links}
               selectedId={selectedLinkId}
@@ -124,8 +148,8 @@ const App: React.FC = () => {
             )}
 
             {selectedResult ? (
-              <ResultViewer 
-                result={selectedResult} 
+              <ResultViewer
+                result={selectedResult}
                 onDownloadAll={handleDownloadAll}
                 showDownloadAll={links.length > 0}
                 completedCount={links.filter(l => l.status === 'completed').length}

@@ -39,58 +39,9 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
 
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in-up">
-      {/* Toolbar above preview */}
-      {showDownloadAll && (
-        <div className="mb-4 flex gap-2 justify-end">
-          <button
-            onClick={onDownloadAll}
-            disabled={!completedCount || completedCount === 0}
-            style={{
-              padding: '0.75rem 1.5rem',
-              fontSize: '0.9rem',
-              fontWeight: '600',
-              backgroundColor: '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: !completedCount || completedCount === 0 ? 'not-allowed' : 'pointer',
-              opacity: !completedCount || completedCount === 0 ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            📥 Скачать все ({completedCount || 0})
-          </button>
-          
-          <button
-            onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              fontSize: '0.9rem',
-              fontWeight: '600',
-              backgroundColor: 'white',
-              color: '#374151',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '1rem', height: '1rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            {viewMode === 'markdown' ? 'Превью' : 'Markdown'}
-          </button>
-        </div>
-      )}
-      
       <div className="bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[70vh]">
         {/* Toolbar */}
-        <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center">
           <div className="flex flex-col">
             <h3 className="font-semibold text-slate-800 truncate max-w-md" title={result.title}>
               {result.title}
@@ -99,42 +50,71 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
               Generated: {result.timestamp}
             </span>
           </div>
+        </div>
 
-          <div className="flex gap-2">
+        {/* Action buttons above content */}
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex gap-2 justify-end items-center">
+          {showDownloadAll && (
             <button
-              onClick={handleCopy}
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${copied
-                  ? 'bg-green-100 text-green-700 hover:bg-green-200 focus:ring-green-500'
-                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-indigo-500'
-                }`}
-            >
-              {copied ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy MD
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleDownload}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-all"
+              onClick={onDownloadAll}
+              disabled={!completedCount || completedCount === 0}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all bg-green-600 text-white hover:bg-green-700 focus:ring-green-500"
+              style={{
+                cursor: !completedCount || completedCount === 0 ? 'not-allowed' : 'pointer',
+                opacity: !completedCount || completedCount === 0 ? 0.5 : 1
+              }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
-              Download
+              Скачать все ({completedCount || 0})
             </button>
-          </div>
+          )}
+          
+          <button
+            onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            {viewMode === 'markdown' ? 'Превью' : 'Markdown'}
+          </button>
+
+          <button
+            onClick={handleCopy}
+            className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${copied
+              ? 'bg-green-100 text-green-700 hover:bg-green-200 focus:ring-green-500'
+              : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-indigo-500'
+              }`}
+          >
+            {copied ? (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy MD
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 shadow-sm transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download
+          </button>
         </div>
 
         {/* Content Area */}
