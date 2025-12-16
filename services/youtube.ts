@@ -44,87 +44,82 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
             throw new Error('Invalid YouTube URL. Could not extract video ID.');
         }
 
-        // First, try to get available caption tracks
-        const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(videoPageUrl)}`,
-            `https://corsproxy.io/?${encodeURIComponent(videoPageUrl)}`
-        ];
+        // Try multiple methods to get transcript
+        let transcriptItems: TranscriptItem[] = [];
+        let videoTitle = 'YouTube Video Transcript';
 
-        let videoHtml = '';
-        let lastError: Error | null = null;
-
-        // Fetch video page to get available caption languages
-        for (const proxyUrl of proxies) {
-            try {
-                const response = await fetch(proxyUrl);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch: ${response.status}`);
+        // Method 1: Try using a public transcript API service
+        try {
+            const apiUrl = `https://youtube-transcriptor.herokuapp.com/transcript?videoId=${videoId}`;
+            const response = await fetch(apiUrl);
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data && Array.isArray(data)) {
+                    transcriptItems = data.map((item: any) => ({
+                        start: item.start || item.offset / 1000,
+                        duration: item.duration || item.dur,
+                        text: item.text
+                    }));
+                    console.log('Method 1: Got transcript from API service');
                 }
-                videoHtml = await response.text();
-                if (videoHtml && videoHtml.length > 1000) {
-                    break;
-                }
-            } catch (error) {
-                lastError = error as Error;
-                console.warn(`Proxy failed: ${proxyUrl}`, error);
             }
+        } catch (error) {
+            console.warn('Method 1 failed:', error);
         }
 
-        // Extract available caption tracks
-        let captionLangs = ['en', 'ru', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'pt']; // Default fallback languages
-        
-        if (videoHtml) {
-            try {
-                const captionMatch = videoHtml.match(/"captionTracks":\s*(\[.+?\])/);
-                if (captionMatch) {
-                    const captionTracks = JSON.parse(captionMatch[1]);
-                    if (captionTracks && captionTracks.length > 0) {
-                        captionLangs = captionTracks.map((track: any) => track.languageCode || track.vssId?.split('.')[0]);
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not parse caption tracks, using default languages');
-            }
-        }
-
-        // Try each available language
-        let transcriptXml = '';
-        
-        for (const lang of captionLangs) {
-            if (!lang) continue;
+        // Method 2: Try timedtext API with multiple languages through proxy
+        if (transcriptItems.length === 0) {
+            const languages = ['en', 'en-US', 'ru', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'pt', 'ar', 'hi', 'it', 'pl', 'nl', 'tr'];
             
-            const transcriptUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
-            
-            for (const proxyUrl of proxies) {
+            for (const lang of languages) {
+                if (transcriptItems.length > 0) break;
+                
+                const transcriptUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=srv3`;
+                
+                // Try without proxy first (sometimes works)
                 try {
-                    const fullProxyUrl = proxyUrl.includes('allorigins') 
-                        ? `https://api.allorigins.win/raw?url=${encodeURIComponent(transcriptUrl)}`
-                        : `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`;
-                    
-                    const response = await fetch(fullProxyUrl);
-                    if (!response.ok) continue;
-                    
-                    const text = await response.text();
-                    if (text && text.includes('<transcript>')) {
-                        transcriptXml = text;
-                        console.log(`Found transcript in language: ${lang}`);
-                        break;
+                    const response = await fetch(transcriptUrl);
+                    if (response.ok) {
+                        const xml = await response.text();
+                        if (xml && (xml.includes('<transcript>') || xml.includes('<text'))) {
+                            transcriptItems = parseTranscriptXml(xml);
+                            console.log(`Method 2a: Got transcript in ${lang} without proxy`);
+                            break;
+                        }
                     }
-                } catch (error) {
-                    console.warn(`Failed to fetch transcript for lang ${lang}:`, error);
+                } catch (e) {
+                    // Continue to proxy method
+                }
+                
+                // Try with proxies
+                const proxies = [
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(transcriptUrl)}`,
+                    `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(transcriptUrl)}`
+                ];
+                
+                for (const proxyUrl of proxies) {
+                    try {
+                        const response = await fetch(proxyUrl);
+                        if (response.ok) {
+                            const xml = await response.text();
+                            if (xml && (xml.includes('<transcript>') || xml.includes('<text'))) {
+                                transcriptItems = parseTranscriptXml(xml);
+                                console.log(`Method 2b: Got transcript in ${lang} via proxy`);
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        // Try next proxy
+                    }
                 }
             }
-            
-            if (transcriptXml) break;
         }
 
-        if (!transcriptXml || !transcriptXml.includes('<transcript>')) {
-            throw new Error('No transcript available for this video. The video may not have captions enabled.');
+        if (!transcriptItems || transcriptItems.length === 0) {
+            throw new Error('No transcript available for this video. The video may not have captions enabled, or captions cannot be accessed due to restrictions.');
         }
-
-        // Parse XML transcript
-        const transcriptItems = parseTranscriptXml(transcriptXml);
 
         if (!transcriptItems || transcriptItems.length === 0) {
             throw new Error('Failed to parse transcript data.');
@@ -179,9 +174,10 @@ date: ${dateStr}
 const parseTranscriptXml = (xml: string): TranscriptItem[] => {
     const items: TranscriptItem[] = [];
 
-    // Parse XML manually (simple approach for browser)
-    const textMatches = xml.matchAll(/<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]*)<\/text>/g);
-
+    // Try multiple XML patterns
+    // Pattern 1: <text start="..." dur="...">text</text>
+    let textMatches = xml.matchAll(/<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]*)<\/text>/g);
+    
     for (const match of textMatches) {
         items.push({
             start: parseFloat(match[1]),
@@ -189,7 +185,33 @@ const parseTranscriptXml = (xml: string): TranscriptItem[] => {
             text: match[3]
         });
     }
-
+    
+    // Pattern 2: <text start="..." d="...">text</text> (alternative format)
+    if (items.length === 0) {
+        textMatches = xml.matchAll(/<text start="([^"]+)" d="([^"]+)"[^>]*>([^<]*)<\/text>/g);
+        
+        for (const match of textMatches) {
+            items.push({
+                start: parseFloat(match[1]),
+                duration: parseFloat(match[2]),
+                text: match[3]
+            });
+        }
+    }
+    
+    // Pattern 3: <text t="..." d="...">text</text>
+    if (items.length === 0) {
+        textMatches = xml.matchAll(/<text t="([^"]+)" d="([^"]+)"[^>]*>([^<]*)<\/text>/g);
+        
+        for (const match of textMatches) {
+            items.push({
+                start: parseFloat(match[1]) / 1000, // Convert ms to seconds
+                duration: parseFloat(match[2]) / 1000,
+                text: match[3]
+            });
+        }
+    }
+    
     return items;
 };
 
