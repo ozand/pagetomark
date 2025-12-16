@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { marked } from 'marked';
 import { ConversionResult } from '../types';
 
 interface ResultViewerProps {
@@ -11,6 +12,11 @@ interface ResultViewerProps {
 export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAll, showDownloadAll, completedCount }) => {
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<'markdown' | 'rendered'>('markdown');
+
+  // Render markdown to HTML using marked
+  const renderedHtml = useMemo(() => {
+    return marked.parse(result.markdown);
+  }, [result.markdown]);
 
   const handleCopy = async () => {
     try {
@@ -70,7 +76,7 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
               Скачать все ({completedCount || 0})
             </button>
           )}
-          
+
           <button
             onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
             className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
@@ -129,7 +135,7 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
           ) : (
             <div
               className="prose prose-slate max-w-none p-6 h-full overflow-auto"
-              dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(result.markdown) }}
+              dangerouslySetInnerHTML={{ __html: renderedHtml }}
             />
           )}
         </div>
@@ -137,44 +143,3 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
     </div>
   );
 };
-
-// Simple markdown to HTML converter
-function convertMarkdownToHtml(markdown: string): string {
-  let html = markdown;
-
-  // Headers
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
-  // Bold
-  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
-
-  // Italic
-  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
-
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-  // Images
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" />');
-
-  // Code blocks
-  html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
-
-  // Inline code
-  html = html.replace(/`([^`]+)`/gim, '<code>$1</code>');
-
-  // Lists
-  html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/gis, '<ul>$1</ul>');
-
-  // Paragraphs
-  html = html.replace(/\n\n/gim, '</p><p>');
-  html = '<p>' + html + '</p>';
-
-  // Line breaks
-  html = html.replace(/\n/gim, '<br>');
-
-  return html;
-}
