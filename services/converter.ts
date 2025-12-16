@@ -7,15 +7,17 @@ import { ConversionResult } from '../types';
  * Fetches the HTML content of a URL using a CORS proxy to bypass browser restrictions.
  */
 const fetchHtml = async (url: string): Promise<string> => {
-  // Try multiple CORS proxies for better reliability
+  // Use our own CORS proxy first, then fallback to public proxies
+  const corsProxyUrl = import.meta.env.VITE_CORS_PROXY_URL || 'https://pagetomark-cors-proxy.ayga-tech.workers.dev';
+
   const proxies = [
+    `${corsProxyUrl}/?${encodeURIComponent(url)}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    `https://corsproxy.io/?${encodeURIComponent(url)}`
   ];
-  
+
   let lastError: Error | null = null;
-  
+
   for (const proxyUrl of proxies) {
     try {
       const response = await fetch(proxyUrl, {
@@ -23,16 +25,16 @@ const fetchHtml = async (url: string): Promise<string> => {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch URL. Status: ${response.status}`);
       }
-      
+
       const html = await response.text();
       if (!html || html.trim().length === 0) {
         throw new Error('No content received from proxy.');
       }
-      
+
       return html;
     } catch (error) {
       lastError = error as Error;
@@ -40,7 +42,7 @@ const fetchHtml = async (url: string): Promise<string> => {
       // Continue to next proxy
     }
   }
-  
+
   throw lastError || new Error('All proxies failed to fetch the URL');
 };
 
@@ -50,12 +52,12 @@ const fetchHtml = async (url: string): Promise<string> => {
 const parseHtml = (html: string, url: string): Document => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
-  
+
   // Inject base tag to handle relative links correctly
   const base = doc.createElement('base');
   base.href = url;
   doc.head.appendChild(base);
-  
+
   return doc;
 };
 
@@ -66,15 +68,15 @@ export const convertUrlToMarkdown = async (url: string): Promise<ConversionResul
   try {
     // 1. Fetch
     const html = await fetchHtml(url);
-    
+
     // 2. Parse DOM
     const doc = parseHtml(html, url);
-    
+
     // 3. Simplify with Readability
     // We clone the document because Readability mutates the DOM
     const reader = new Readability(doc.cloneNode(true) as Document);
     const article = reader.parse();
-    
+
     if (!article) {
       throw new Error('Readability failed to parse the article content.');
     }
@@ -86,7 +88,7 @@ export const convertUrlToMarkdown = async (url: string): Promise<ConversionResul
       hr: '---',
       bulletListMarker: '-',
     });
-    
+
     // Custom rule to improve link handling if needed, or stripping clutter
     turndownService.addRule('remove-scripts', {
       filter: ['script', 'style', 'noscript'],

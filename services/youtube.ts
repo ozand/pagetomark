@@ -47,19 +47,52 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
         let transcriptItems: TranscriptItem[] = [];
         let videoTitle = 'YouTube Video Transcript';
 
-        // Helper to wrap URL in a CORS proxy
-        const proxyUrl = (targetUrl: string) => 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
-
-        // YouTube often blocks CORS proxies from getting full page data
-        // Try direct timedtext API first with common languages
-        const languages = ['en', 'en-US', 'en-GB', 'a.en', 'ru', 'es', 'fr', 'de', 'ja', 'ko', 'pt', 'it'];
-
         console.log('Attempting to fetch YouTube transcript for video:', videoId);
 
-        for (const lang of languages) {
-            if (transcriptItems.length > 0) break;
+        // Method 1: Try Cloudflare Worker proxy (most reliable)
+        const workerUrl = import.meta.env.VITE_YOUTUBE_PROXY_URL || 'https://youtube-transcript-proxy.ayga-tech.workers.dev';
+
+        try {
+            console.log('Trying Cloudflare Worker proxy...');
+            const response = await fetch(`${workerUrl}?videoId=${videoId}`);
+
+            if (response.ok) {
+                const data = await response.json();
+
+                if (data.success && data.transcript) {
+                    videoTitle = data.title || videoTitle;
+
+                    // Parse the transcript XML
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(data.transcript, "text/xml");
+                    const texts = doc.getElementsByTagName('text');
+
+                    if (texts.length > 0) {
+                        transcriptItems = Array.from(texts).map(text => ({
+                            text: text.textContent || '',
+                            duration: parseFloat(text.getAttribute('dur') || text.getAttribute('d') || '0'),
+                            start: parseFloat(text.getAttribute('start') || '0')
+                        }));
+
+                        console.log(`✓ Got transcript from Worker proxy - ${transcriptItems.length} segments`);
+                    }
+                } else if (data.error) {
+                    console.warn('Worker returned error:', data.error);
+                }
+            }
+        } catch (error) {
+            console.warn('Worker proxy failed:', error);
+        }
+
+        // Method 2: Fallback to CORS proxy + timedtext API
+        if (transcriptItems.length === 0) {
+            console.log('Trying fallback: CORS proxy + timedtext API...');
+
+            const corsProxyUrl = import.meta.env.VITE_CORS_PROXY_URL || 'https://pagetomark-cors-proxy.ayga-tech.workers.dev';
+            const proxyUrl = (targetUrl: string) => `${corsProxyUrl}/?${encodeURIComponent(targetUrl)}`;
 
             try {
+                const proxyUrl = (targetUrl: string) => 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
                 const timedtextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
                 console.log(`Trying timedtext API with language: ${lang}`);
 
