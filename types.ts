@@ -16,6 +16,14 @@ export interface ConversionResult {
   timestamp: string;
 }
 
+export interface ProcessedLink {
+  id: string;
+  url: string;
+  status: 'processing' | 'completed' | 'error';
+  result?: ConversionResult;
+  error?: string;
+}
+
 export enum LoadingState {
   IDLE = 'IDLE',
   FETCHING = 'FETCHING',
