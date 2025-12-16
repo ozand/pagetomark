@@ -44,28 +44,25 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
             throw new Error('Invalid YouTube URL. Could not extract video ID.');
         }
 
-        // Use a public transcript API endpoint
-        const apiUrl = `https://youtube-transcript3.p.rapidapi.com/transcript?videoId=${videoId}`;
-        
-        // Try alternative: use iframe_api approach or timedtext API
-        const transcriptUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en`;
-        
+        // First, try to get available caption tracks
+        const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
         const proxies = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(transcriptUrl)}`,
-            `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(videoPageUrl)}`,
+            `https://corsproxy.io/?${encodeURIComponent(videoPageUrl)}`
         ];
 
-        let transcriptXml = '';
+        let videoHtml = '';
         let lastError: Error | null = null;
 
+        // Fetch video page to get available caption languages
         for (const proxyUrl of proxies) {
             try {
                 const response = await fetch(proxyUrl);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch: ${response.status}`);
                 }
-                transcriptXml = await response.text();
-                if (transcriptXml && transcriptXml.includes('<transcript>')) {
+                videoHtml = await response.text();
+                if (videoHtml && videoHtml.length > 1000) {
                     break;
                 }
             } catch (error) {
@@ -74,8 +71,56 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
             }
         }
 
+        // Extract available caption tracks
+        let captionLangs = ['en', 'ru', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'pt']; // Default fallback languages
+        
+        if (videoHtml) {
+            try {
+                const captionMatch = videoHtml.match(/"captionTracks":\s*(\[.+?\])/);
+                if (captionMatch) {
+                    const captionTracks = JSON.parse(captionMatch[1]);
+                    if (captionTracks && captionTracks.length > 0) {
+                        captionLangs = captionTracks.map((track: any) => track.languageCode || track.vssId?.split('.')[0]);
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not parse caption tracks, using default languages');
+            }
+        }
+
+        // Try each available language
+        let transcriptXml = '';
+        
+        for (const lang of captionLangs) {
+            if (!lang) continue;
+            
+            const transcriptUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
+            
+            for (const proxyUrl of proxies) {
+                try {
+                    const fullProxyUrl = proxyUrl.includes('allorigins') 
+                        ? `https://api.allorigins.win/raw?url=${encodeURIComponent(transcriptUrl)}`
+                        : `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`;
+                    
+                    const response = await fetch(fullProxyUrl);
+                    if (!response.ok) continue;
+                    
+                    const text = await response.text();
+                    if (text && text.includes('<transcript>')) {
+                        transcriptXml = text;
+                        console.log(`Found transcript in language: ${lang}`);
+                        break;
+                    }
+                } catch (error) {
+                    console.warn(`Failed to fetch transcript for lang ${lang}:`, error);
+                }
+            }
+            
+            if (transcriptXml) break;
+        }
+
         if (!transcriptXml || !transcriptXml.includes('<transcript>')) {
-            throw new Error('No transcript available for this video. The video may not have captions enabled or captions are not available in English.');
+            throw new Error('No transcript available for this video. The video may not have captions enabled.');
         }
 
         // Parse XML transcript
@@ -133,10 +178,10 @@ date: ${dateStr}
  */
 const parseTranscriptXml = (xml: string): TranscriptItem[] => {
     const items: TranscriptItem[] = [];
-    
+
     // Parse XML manually (simple approach for browser)
     const textMatches = xml.matchAll(/<text start="([^"]+)" dur="([^"]+)"[^>]*>([^<]*)<\/text>/g);
-    
+
     for (const match of textMatches) {
         items.push({
             start: parseFloat(match[1]),
@@ -144,7 +189,7 @@ const parseTranscriptXml = (xml: string): TranscriptItem[] => {
             text: match[3]
         });
     }
-    
+
     return items;
 };
 
