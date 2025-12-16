@@ -1,5 +1,5 @@
 name = "pagetomark"
 compatibility_date = "2025-12-16"
 
-[site]
-bucket = "./dist"
+[assets]
+directory = "./dist"
