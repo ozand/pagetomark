@@ -13,9 +13,22 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<'markdown' | 'rendered'>('markdown');
 
-  // Render markdown to HTML using marked
+  // Render markdown to HTML using marked with proper configuration
   const renderedHtml = useMemo(() => {
-    return marked.parse(result.markdown);
+    try {
+      // Configure marked options
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+      });
+      
+      // Parse markdown synchronously
+      const html = marked.parse(result.markdown, { async: false }) as string;
+      return html;
+    } catch (error) {
+      console.error('Error rendering markdown:', error);
+      return `<p>Error rendering markdown</p>`;
+    }
   }, [result.markdown]);
 
   const handleCopy = async () => {
