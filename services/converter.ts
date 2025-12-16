@@ -7,21 +7,41 @@ import { ConversionResult } from '../types';
  * Fetches the HTML content of a URL using a CORS proxy to bypass browser restrictions.
  */
 const fetchHtml = async (url: string): Promise<string> => {
-  // Using allorigins.win as a free CORS proxy for this client-side demo.
-  // In a production environment, you should set up your own proxy server.
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  // Try multiple CORS proxies for better reliability
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+  ];
   
-  const response = await fetch(proxyUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch URL. Status: ${response.status}`);
+  let lastError: Error | null = null;
+  
+  for (const proxyUrl of proxies) {
+    try {
+      const response = await fetch(proxyUrl, {
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch URL. Status: ${response.status}`);
+      }
+      
+      const html = await response.text();
+      if (!html || html.trim().length === 0) {
+        throw new Error('No content received from proxy.');
+      }
+      
+      return html;
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(`Proxy failed: ${proxyUrl}`, error);
+      // Continue to next proxy
+    }
   }
   
-  const data = await response.json();
-  if (!data.contents) {
-    throw new Error('No content received from proxy.');
-  }
-  
-  return data.contents;
+  throw lastError || new Error('All proxies failed to fetch the URL');
 };
 
 /**
