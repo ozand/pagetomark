@@ -95,8 +95,19 @@ const App: React.FC = () => {
           <div>
             <InputForm onConvert={handleConvert} loadingState={loadingState} />
 
+            <LinksList
+              links={links}
+              selectedId={selectedLinkId}
+              onSelectLink={handleSelectLink}
+              onRemoveLink={handleRemoveLink}
+              onClearAll={handleClearAll}
+            />
+          </div>
+
+          {/* Right Column */}
+          <div>
             {links.length > 0 && (
-              <div className="mt-6">
+              <div className="mb-4">
                 <button
                   onClick={handleDownloadAll}
                   disabled={links.filter(l => l.status === 'completed').length === 0}
@@ -110,26 +121,14 @@ const App: React.FC = () => {
                     border: 'none',
                     borderRadius: '8px',
                     cursor: links.filter(l => l.status === 'completed').length === 0 ? 'not-allowed' : 'pointer',
-                    opacity: links.filter(l => l.status === 'completed').length === 0 ? 0.5 : 1,
-                    marginBottom: '1rem'
+                    opacity: links.filter(l => l.status === 'completed').length === 0 ? 0.5 : 1
                   }}
                 >
                   📥 Скачать все ({links.filter(l => l.status === 'completed').length})
                 </button>
               </div>
             )}
-
-            <LinksList
-              links={links}
-              selectedId={selectedLinkId}
-              onSelectLink={handleSelectLink}
-              onRemoveLink={handleRemoveLink}
-              onClearAll={handleClearAll}
-            />
-          </div>
-
-          {/* Right Column */}
-          <div>
+            
             {loadingState === LoadingState.ERROR && errorMessage && (
               <div className="w-full mb-8 p-4 bg-red-50 border-l-4 border-red-500 rounded-md">
                 <div className="flex">

@@ -7,6 +7,7 @@ interface ResultViewerProps {
 
 export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
   const [copied, setCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<'markdown' | 'rendered'>('markdown');
 
   const handleCopy = async () => {
     try {
@@ -48,6 +49,17 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
           </div>
           
           <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode(viewMode === 'markdown' ? 'rendered' : 'markdown')}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {viewMode === 'markdown' ? 'Превью' : 'Markdown'}
+            </button>
+            
              <button
               onClick={handleCopy}
               className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all ${
@@ -86,15 +98,63 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result }) => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 relative bg-slate-50">
-          <textarea
-            readOnly
-            value={result.markdown}
-            className="w-full h-full p-6 resize-none outline-none font-mono text-sm leading-6 text-slate-800 bg-slate-50 border-none focus:ring-0"
-            spellCheck={false}
-          />
+        <div className="flex-1 relative bg-slate-50 overflow-auto">
+          {viewMode === 'markdown' ? (
+            <textarea
+              readOnly
+              value={result.markdown}
+              className="w-full h-full p-6 resize-none outline-none font-mono text-sm leading-6 text-slate-800 bg-slate-50 border-none focus:ring-0"
+              spellCheck={false}
+            />
+          ) : (
+            <div 
+              className="prose prose-slate max-w-none p-6 h-full overflow-auto"
+              dangerouslySetInnerHTML={{ __html: convertMarkdownToHtml(result.markdown) }}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 };
+
+// Simple markdown to HTML converter
+function convertMarkdownToHtml(markdown: string): string {
+  let html = markdown;
+  
+  // Headers
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+  
+  // Italic
+  html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+  
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  
+  // Images
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" />');
+  
+  // Code blocks
+  html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
+  
+  // Inline code
+  html = html.replace(/`([^`]+)`/gim, '<code>$1</code>');
+  
+  // Lists
+  html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/gis, '<ul>$1</ul>');
+  
+  // Paragraphs
+  html = html.replace(/\n\n/gim, '</p><p>');
+  html = '<p>' + html + '</p>';
+  
+  // Line breaks
+  html = html.replace(/\n/gim, '<br>');
+  
+  return html;
+}
