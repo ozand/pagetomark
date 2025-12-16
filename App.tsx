@@ -66,10 +66,11 @@ const App: React.FC = () => {
     const completedLinks = links.filter(link => link.status === 'completed' && link.result);
     if (completedLinks.length === 0) return;
 
-    const combinedMarkdown = completedLinks.map(link => {
+    const combinedMarkdown = completedLinks.map((link, index) => {
       const result = link.result!;
-      return `# ${result.title}\n\n**URL:** ${result.url}\n**Date:** ${result.timestamp}\n\n---\n\n${result.markdown}\n\n`;
-    }).join('\n---\n\n');
+      // Since result.markdown already contains metadata and title, just use it
+      return result.markdown;
+    }).join('\n\n---\n\n');
 
     const blob = new Blob([combinedMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);

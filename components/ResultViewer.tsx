@@ -21,7 +21,7 @@ export const ResultViewer: React.FC<ResultViewerProps> = ({ result, onDownloadAl
         breaks: true,
         gfm: true,
       });
-      
+
       // Parse markdown synchronously
       const html = marked.parse(result.markdown, { async: false }) as string;
       return html;
