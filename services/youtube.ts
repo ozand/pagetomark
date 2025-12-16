@@ -61,10 +61,47 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
                 videoTitle = titleMatch[1].replace(' - YouTube', '').trim();
             }
 
-            // 2. Extract Captions JSON
-            const captionMatch = videoPageHtml.match(/"captionTracks":(\[.*?\])/);
+            // 2. Extract Captions JSON - try multiple patterns
+            let captionMatch = videoPageHtml.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
 
+            // Alternative: try to find the whole ytInitialPlayerResponse
             if (!captionMatch) {
+                const playerResponseMatch = videoPageHtml.match(/var ytInitialPlayerResponse\s*=\s*({.+?});/);
+                if (playerResponseMatch) {
+                    try {
+                        const playerResponse = JSON.parse(playerResponseMatch[1]);
+                        const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+                        if (captions && captions.length > 0) {
+                            // Manually select and fetch the caption
+                            const track =
+                                captions.find((t: any) => t.languageCode === 'en' && !t.kind) ||
+                                captions.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') ||
+                                captions[0];
+
+                            if (track?.baseUrl) {
+                                const transcriptRes = await fetch(proxyUrl(track.baseUrl));
+                                const transcriptXml = await transcriptRes.text();
+
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(transcriptXml, "text/xml");
+                                const texts = doc.getElementsByTagName('text');
+
+                                transcriptItems = Array.from(texts).map(text => ({
+                                    text: text.textContent || '',
+                                    duration: parseFloat(text.getAttribute('dur') || '0'),
+                                    start: parseFloat(text.getAttribute('start') || '0')
+                                }));
+
+                                console.log('Got transcript from ytInitialPlayerResponse');
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse ytInitialPlayerResponse:', e);
+                    }
+                }
+            }
+
+            if (!captionMatch && transcriptItems.length === 0) {
                 // Check for common error cases
                 if (videoPageHtml.includes('class="g-recaptcha"')) {
                     throw new Error("YouTube is asking for a captcha. Please try again later.");
@@ -72,37 +109,40 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
                 if (videoPageHtml.includes('"playabilityStatus":{"status":"ERROR"')) {
                     throw new Error("Video is unavailable or private.");
                 }
-                throw new Error("No captions found for this video.");
+                throw new Error("No captions found for this video. The video may not have subtitles enabled.");
             }
 
-            const tracks = JSON.parse(captionMatch[1]);
+            // If we already got transcripts from ytInitialPlayerResponse, skip this
+            if (transcriptItems.length === 0 && captionMatch) {
+                const tracks = JSON.parse(captionMatch[1]);
 
-            // 3. Select Track (English preferred, or first available)
-            const track =
-                tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || // Manual English
-                tracks.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') || // Auto English
-                tracks[0]; // Fallback
+                // 3. Select Track (English preferred, or first available)
+                const track =
+                    tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || // Manual English
+                    tracks.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') || // Auto English
+                    tracks[0]; // Fallback
 
-            if (!track) {
-                throw new Error("No usable caption track found.");
+                if (!track) {
+                    throw new Error("No usable caption track found.");
+                }
+
+                // 4. Fetch Transcript XML
+                const transcriptRes = await fetch(proxyUrl(track.baseUrl));
+                const transcriptXml = await transcriptRes.text();
+
+                // 5. Parse XML using DOMParser
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(transcriptXml, "text/xml");
+                const texts = doc.getElementsByTagName('text');
+
+                transcriptItems = Array.from(texts).map(text => ({
+                    text: text.textContent || '',
+                    duration: parseFloat(text.getAttribute('dur') || '0'),
+                    start: parseFloat(text.getAttribute('start') || '0')
+                }));
+
+                console.log('Got transcript from captionTracks');
             }
-
-            // 4. Fetch Transcript XML
-            const transcriptRes = await fetch(proxyUrl(track.baseUrl));
-            const transcriptXml = await transcriptRes.text();
-
-            // 5. Parse XML using DOMParser
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(transcriptXml, "text/xml");
-            const texts = doc.getElementsByTagName('text');
-
-            transcriptItems = Array.from(texts).map(text => ({
-                text: text.textContent || '',
-                duration: parseFloat(text.getAttribute('dur') || '0'),
-                start: parseFloat(text.getAttribute('start') || '0')
-            }));
-
-            console.log('Got transcript successfully');
 
         } catch (error: any) {
             console.error('Manual Transcript Fetch Error:', error);
