@@ -63,7 +63,7 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
 
             // 2. Extract Captions JSON
             const captionMatch = videoPageHtml.match(/"captionTracks":(\[.*?\])/);
-            
+
             if (!captionMatch) {
                 // Check for common error cases
                 if (videoPageHtml.includes('class="g-recaptcha"')) {
@@ -78,7 +78,7 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
             const tracks = JSON.parse(captionMatch[1]);
 
             // 3. Select Track (English preferred, or first available)
-            const track = 
+            const track =
                 tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || // Manual English
                 tracks.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') || // Auto English
                 tracks[0]; // Fallback
