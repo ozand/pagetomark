@@ -34,6 +34,29 @@ export const isYouTubeUrl = (url: string): boolean => {
 };
 
 /**
+ * Decode HTML entities
+ */
+const decodeHtmlEntities = (text: string): string => {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+};
+
+/**
+ * Format seconds to MM:SS or HH:MM:SS
+ */
+const formatTimestamp = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
+/**
  * Fetch YouTube video transcript and convert to markdown
  */
 export const getYouTubeTranscript = async (url: string): Promise<ConversionResult> => {
@@ -49,11 +72,11 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
 
         console.log('Attempting to fetch YouTube transcript for video:', videoId);
 
-        // Method 1: Try Cloudflare Worker proxy (most reliable)
+        // Method 1: Try Cloudflare Worker proxy
         const workerUrl = import.meta.env.VITE_YOUTUBE_PROXY_URL || 'https://youtube-transcript-proxy.ayga-tech.workers.dev';
 
         try {
-            console.log('Trying Cloudflare Worker proxy...');
+            console.log('Method 1: Trying Cloudflare Worker proxy...');
             const response = await fetch(`${workerUrl}?videoId=${videoId}`);
 
             if (response.ok) {
@@ -62,7 +85,6 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
                 if (data.success && data.transcript) {
                     videoTitle = data.title || videoTitle;
 
-                    // Parse the transcript XML
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(data.transcript, "text/xml");
                     const texts = doc.getElementsByTagName('text');
@@ -74,185 +96,159 @@ export const getYouTubeTranscript = async (url: string): Promise<ConversionResul
                             start: parseFloat(text.getAttribute('start') || '0')
                         }));
 
-                        console.log(`✓ Got transcript from Worker proxy - ${transcriptItems.length} segments`);
+                        console.log(`✓ Worker success: ${transcriptItems.length} segments`);
                     }
-                } else if (data.error) {
-                    console.warn('Worker returned error:', data.error);
                 }
             }
         } catch (error) {
-            console.warn('Worker proxy failed:', error);
+            console.warn('Worker failed:', error);
         }
 
-        // Method 2: Fallback to CORS proxy + timedtext API
+        // Method 2: Try timedtext API directly (no proxy)
         if (transcriptItems.length === 0) {
-            console.log('Trying fallback: CORS proxy + timedtext API...');
+            console.log('Method 2: Trying timedtext API direct...');
+
+            const languages = ['en', 'ru', 'es', 'fr', 'de'];
+
+            for (const lang of languages) {
+                try {
+                    const timedtextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
+                    console.log(`  Trying ${lang}...`);
+
+                    const response = await fetch(timedtextUrl);
+
+                    if (response.ok) {
+                        const xml = await response.text();
+                        console.log(`  ${lang} XML length:`, xml.length);
+
+                        if (xml && xml.trim().length > 0 && xml.includes('<text')) {
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(xml, "text/xml");
+                            const texts = doc.getElementsByTagName('text');
+
+                            if (texts.length > 0) {
+                                transcriptItems = Array.from(texts).map(text => ({
+                                    text: text.textContent || '',
+                                    duration: parseFloat(text.getAttribute('dur') || text.getAttribute('d') || '0'),
+                                    start: parseFloat(text.getAttribute('start') || '0')
+                                }));
+
+                                console.log(`✓ Timedtext direct success (${lang}): ${transcriptItems.length} segments`);
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`  ${lang} failed:`, e);
+                }
+            }
+        }
+
+        // Method 3: Try fetching video page with CORS proxy
+        if (transcriptItems.length === 0) {
+            console.log('Method 3: Trying video page scraping...');
 
             const corsProxyUrl = import.meta.env.VITE_CORS_PROXY_URL || 'https://pagetomark-cors-proxy.ayga-tech.workers.dev';
             const proxyUrl = (targetUrl: string) => `${corsProxyUrl}/?${encodeURIComponent(targetUrl)}`;
 
             try {
-                const proxyUrl = (targetUrl: string) => 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
-                const timedtextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}`;
-                console.log(`Trying timedtext API with language: ${lang}`);
+                const videoPageRes = await fetch(proxyUrl(`https://www.youtube.com/watch?v=${videoId}`));
+                console.log('  Video page response:', videoPageRes.status);
 
-                const response = await fetch(proxyUrl(timedtextUrl));
-
-                if (response.ok) {
-                    const xml = await response.text();
-
-                    if (xml && xml.includes('<text')) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(xml, "text/xml");
-                        const texts = doc.getElementsByTagName('text');
-
-                        if (texts.length > 0) {
-                            transcriptItems = Array.from(texts).map(text => ({
-                                text: text.textContent || '',
-                                duration: parseFloat(text.getAttribute('dur') || text.getAttribute('d') || '0'),
-                                start: parseFloat(text.getAttribute('start') || '0')
-                            }));
-
-                            console.log(`✓ Got transcript from timedtext API (${lang}) - ${transcriptItems.length} segments`);
-                            break;
-                        }
-                    }
+                if (!videoPageRes.ok) {
+                    throw new Error(`Page fetch failed: ${videoPageRes.status}`);
                 }
-            } catch (e) {
-                console.warn(`Failed for ${lang}:`, e);
-            }
-        }
 
-        // If timedtext API didn't work, try fetching the video page
-        if (transcriptItems.length === 0) {
-            console.log('Timedtext API failed, trying video page...');
+                const videoPageHtml = await videoPageRes.text();
+                console.log('  HTML length:', videoPageHtml.length);
 
-            // 1. Fetch Video Page
-            const videoPageRes = await fetch(proxyUrl(`https://www.youtube.com/watch?v=${videoId}`));
-            const videoPageHtml = await videoPageRes.text();
+                // Extract video title
+                const titleMatch = videoPageHtml.match(/<title>(.+?)<\/title>/);
+                if (titleMatch) {
+                    videoTitle = titleMatch[1].replace(' - YouTube', '').trim();
+                    console.log('  Title:', videoTitle);
+                }
 
-            // Extract video title
-            const titleMatch = videoPageHtml.match(/<title>(.+?)<\/title>/);
-            if (titleMatch) {
-                videoTitle = titleMatch[1].replace(' - YouTube', '').trim();
-            }
+                // Look for ytInitialPlayerResponse
+                const playerResponseMatch = videoPageHtml.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
 
-            // 2. Extract Captions JSON - try multiple patterns
-            let captionMatch = videoPageHtml.match(/"captionTracks":\s*(\[[\s\S]*?\])/);
+                if (playerResponseMatch) {
+                    console.log('  Found ytInitialPlayerResponse, parsing...');
 
-            // Alternative patterns to search for
-            if (!captionMatch) {
-                captionMatch = videoPageHtml.match(/"captionTracks":(\[[^\]]+\])/);
-            }
+                    try {
+                        const playerResponse = JSON.parse(playerResponseMatch[1]);
+                        const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
 
-            // Try searching in different parts of the page
-            if (!captionMatch) {
-                // Look for the entire player response object
-                const patterns = [
-                    /var ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
-                    /"playerResponse"\s*:\s*(\{.+?\})/s,
-                    /ytInitialPlayerResponse\s*=\s*(\{[^;]+\});/s
-                ];
+                        if (captions && Array.isArray(captions) && captions.length > 0) {
+                            console.log(`  Found ${captions.length} caption tracks`);
 
-                for (const pattern of patterns) {
-                    const match = videoPageHtml.match(pattern);
-                    if (match) {
-                        try {
-                            const playerResponse = JSON.parse(match[1]);
-                            const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+                            // Select best track
+                            const track =
+                                captions.find((t: any) => t.languageCode === 'en' && !t.kind) ||
+                                captions.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') ||
+                                captions[0];
 
-                            if (captions && captions.length > 0) {
-                                // Manually select and fetch the caption
-                                const track =
-                                    captions.find((t: any) => t.languageCode === 'en' && !t.kind) ||
-                                    captions.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') ||
-                                    captions[0];
+                            if (track?.baseUrl) {
+                                console.log('  Fetching caption from:', track.baseUrl.substring(0, 100) + '...');
 
-                                if (track?.baseUrl) {
-                                    const transcriptRes = await fetch(proxyUrl(track.baseUrl));
-                                    const transcriptXml = await transcriptRes.text();
+                                const transcriptRes = await fetch(proxyUrl(track.baseUrl));
+                                const transcriptXml = await transcriptRes.text();
 
-                                    const parser = new DOMParser();
-                                    const doc = parser.parseFromString(transcriptXml, "text/xml");
-                                    const texts = doc.getElementsByTagName('text');
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(transcriptXml, "text/xml");
+                                const texts = doc.getElementsByTagName('text');
 
+                                if (texts.length > 0) {
                                     transcriptItems = Array.from(texts).map(text => ({
                                         text: text.textContent || '',
                                         duration: parseFloat(text.getAttribute('dur') || '0'),
                                         start: parseFloat(text.getAttribute('start') || '0')
                                     }));
 
-                                    console.log('Got transcript from player response');
-                                    break;
+                                    console.log(`✓ Page scraping success: ${transcriptItems.length} segments`);
                                 }
                             }
-                        } catch (e) {
-                            console.warn('Failed to parse player response:', e);
-                            continue;
+                        } else {
+                            console.log('  No captions found in playerResponse');
                         }
+                    } catch (e) {
+                        console.warn('  Failed to parse playerResponse:', e);
                     }
+                } else {
+                    console.log('  ytInitialPlayerResponse not found in HTML');
                 }
+            } catch (error) {
+                console.warn('  Video page fetch failed:', error);
             }
+        }
 
-            if (transcriptItems.length === 0) {
-                // Provide helpful error message
-                console.error('Could not find captions. Video ID:', videoId);
+        // Check if we got any transcript
+        if (transcriptItems.length === 0) {
+            console.error('❌ All methods failed for video:', videoId);
+            throw new Error("No captions found for this video. The video may not have subtitles enabled.");
+        }
 
-                throw new Error("No captions found for this video. The video may not have subtitles enabled, or they may be restricted. Try a video with CC (closed captions) available.");
-            }
+        // Format the transcript
+        let transcriptText = '';
 
-            // If we already got transcripts from ytInitialPlayerResponse, skip this
-            if (transcriptItems.length === 0 && captionMatch) {
-                const tracks = JSON.parse(captionMatch[1]);
+        transcriptItems.forEach((item: TranscriptItem) => {
+            const timestamp = formatTimestamp(item.start);
+            const cleanText = decodeHtmlEntities(item.text);
+            transcriptText += `**[${timestamp}]** ${cleanText}\n\n`;
+        });
 
-                // 3. Select Track (English preferred, or first available)
-                const track =
-                    tracks.find((t: any) => t.languageCode === 'en' && !t.kind) || // Manual English
-                    tracks.find((t: any) => t.languageCode === 'en' && t.kind === 'asr') || // Auto English
-                    tracks[0]; // Fallback
+        // Format metadata
+        const dateStr = moment().format('YYYY-MM-DD HH:mm:ss');
+        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-                if (!track) {
-                    throw new Error("No usable caption track found.");
-                }
-
-                // 4. Fetch Transcript XML
-                const transcriptRes = await fetch(proxyUrl(track.baseUrl));
-                const transcriptXml = await transcriptRes.text();
-
-                // 5. Parse XML using DOMParser
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(transcriptXml, "text/xml");
-                const texts = doc.getElementsByTagName('text');
-
-                transcriptItems = Array.from(texts).map(text => ({
-                    text: text.textContent || '',
-                    duration: parseFloat(text.getAttribute('dur') || '0'),
-                    start: parseFloat(text.getAttribute('start') || '0')
-                }));
-
-                console.log('Got transcript from captionTracks');
-            }
-
-            let transcriptText = '';
-
-            transcriptItems.forEach((item: TranscriptItem) => {
-                const timestamp = formatTimestamp(item.start);
-                const cleanText = decodeHtmlEntities(item.text);
-                transcriptText += `**[${timestamp}]** ${cleanText}\n\n`;
-            });
-
-            // Format metadata
-            const dateStr = moment().format('YYYY-MM-DD HH:mm:ss');
-            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-            const header = `---
-title: "YouTube Video Transcript"
+        const header = `---
+title: "${videoTitle}"
 source: ${videoUrl}
 video_id: ${videoId}
 date: ${dateStr}
 ---
 
-# YouTube Video Transcript
+# ${videoTitle}
 
 **Video:** [${videoUrl}](${videoUrl})
 
@@ -260,40 +256,17 @@ date: ${dateStr}
 
 `;
 
-            const fullMarkdown = header + transcriptText;
+        const fullMarkdown = header + transcriptText;
 
-            return {
-                markdown: fullMarkdown,
-                title: 'YouTube Video Transcript',
-                url: videoUrl,
-                timestamp: dateStr
-            };
+        return {
+            markdown: fullMarkdown,
+            title: videoTitle,
+            url: videoUrl,
+            timestamp: dateStr
+        };
 
-        } catch (error: any) {
-            console.error('YouTube transcript error:', error);
-            throw new Error(`Failed to fetch YouTube transcript: ${error.message || 'Unknown error'}`);
-        }
-    };
-
-    /**
-     * Decode HTML entities
-     */
-    const decodeHtmlEntities = (text: string): string => {
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        return textarea.value;
-    };
-
-    /**
-     * Format seconds to MM:SS or HH:MM:SS
-     */
-    const formatTimestamp = (seconds: number): string => {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-
-        if (hours > 0) {
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
+    } catch (error: any) {
+        console.error('YouTube transcript error:', error);
+        throw new Error(`Failed to fetch transcript: ${error.message || 'Unknown error'}`);
+    }
+};
