@@ -20,41 +20,74 @@ function isListedInWhitelist(uri, listing) {
     return isListed;
 }
 
-addEventListener("fetch", async event => {
-    event.respondWith((async function () {
-        const isPreflightRequest = (event.request.method === "OPTIONS");
-        const originUrl = new URL(event.request.url);
+export default {
+    async fetch(request, env, ctx) {
+        try {
+            const isPreflightRequest = (request.method === "OPTIONS");
+            const originUrl = new URL(request.url);
 
-        function setupCORSHeaders(headers) {
-            headers.set("Access-Control-Allow-Origin", event.request.headers.get("Origin") || "*");
-            if (isPreflightRequest) {
-                headers.set("Access-Control-Allow-Methods", event.request.headers.get("access-control-request-method") || "GET, POST, PUT, DELETE, OPTIONS");
-                const requestedHeaders = event.request.headers.get("access-control-request-headers");
+            function setupCORSHeaders(headers) {
+                headers.set("Access-Control-Allow-Origin", request.headers.get("Origin") || "*");
+                if (isPreflightRequest) {
+                    headers.set("Access-Control-Allow-Methods", request.headers.get("access-control-request-method") || "GET, POST, PUT, DELETE, OPTIONS");
+                    const requestedHeaders = request.headers.get("access-control-request-headers");
 
-                if (requestedHeaders) {
-                    headers.set("Access-Control-Allow-Headers", requestedHeaders);
+                    if (requestedHeaders) {
+                        headers.set("Access-Control-Allow-Headers", requestedHeaders);
+                    }
+
+                    headers.delete("X-Content-Type-Options");
+                }
+                return headers;
+            }
+
+            // Fixed: remove double decoding and handle empty search string
+            const targetUrl = originUrl.search.length > 1 ? decodeURIComponent(originUrl.search.substring(1)) : "";
+            const originHeader = request.headers.get("Origin");
+
+            // Validate target URL
+            if (targetUrl && !targetUrl.match(/^https?:\/\//)) {
+                return new Response(
+                    `Invalid URL: ${targetUrl}\n\nPlease provide a full URL with http:// or https:// protocol.`,
+                    {
+                        status: 400,
+                        headers: {
+                            'Content-Type': 'text/plain',
+                            'Access-Control-Allow-Origin': '*'
+                        }
+                    }
+                );
+            }
+
+            // Show usage if no target URL provided
+            if (!targetUrl || targetUrl.length === 0) {
+                let responseHeaders = new Headers();
+                responseHeaders = setupCORSHeaders(responseHeaders);
+
+                return new Response(
+                    "PageToMark CORS Proxy\n\n" +
+                    "Usage:\n" +
+                    originUrl.origin + "/?target_url\n\n" +
+                    "Example:\n" +
+                    originUrl.origin + "/?https://example.com\n",
+                    {
+                        status: 200,
+                        headers: responseHeaders
+                    }
+                );
+            }
+
+            if ((!isListedInWhitelist(targetUrl, blacklistUrls)) && (isListedInWhitelist(originHeader, whitelistOrigins))) {
+                let customHeaders = request.headers.get("x-cors-headers");
+
+                if (customHeaders !== null) {
+                    try {
+                        customHeaders = JSON.parse(customHeaders);
+                    } catch (e) { }
                 }
 
-                headers.delete("X-Content-Type-Options");
-            }
-            return headers;
-        }
-
-        const targetUrl = decodeURIComponent(decodeURIComponent(originUrl.search.substr(1)));
-        const originHeader = event.request.headers.get("Origin");
-
-        if ((!isListedInWhitelist(targetUrl, blacklistUrls)) && (isListedInWhitelist(originHeader, whitelistOrigins))) {
-            let customHeaders = event.request.headers.get("x-cors-headers");
-
-            if (customHeaders !== null) {
-                try {
-                    customHeaders = JSON.parse(customHeaders);
-                } catch (e) { }
-            }
-
-            if (originUrl.search.startsWith("?")) {
                 const filteredHeaders = {};
-                for (const [key, value] of event.request.headers.entries()) {
+                for (const [key, value] of request.headers.entries()) {
                     if (
                         (key.match("^origin") === null) &&
                         (key.match("eferer") === null) &&
@@ -70,12 +103,14 @@ addEventListener("fetch", async event => {
                     Object.entries(customHeaders).forEach((entry) => (filteredHeaders[entry[0]] = entry[1]));
                 }
 
-                const newRequest = new Request(event.request, {
-                    redirect: "follow",
-                    headers: filteredHeaders
+                const newRequest = new Request(targetUrl, {
+                    method: request.method,
+                    headers: filteredHeaders,
+                    body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+                    redirect: "follow"
                 });
 
-                const response = await fetch(targetUrl, newRequest);
+                const response = await fetch(newRequest);
                 let responseHeaders = new Headers(response.headers);
                 const exposedHeaders = [];
                 const allResponseHeaders = {};
@@ -99,29 +134,25 @@ addEventListener("fetch", async event => {
                 return new Response(responseBody, responseInit);
 
             } else {
-                let responseHeaders = new Headers();
-                responseHeaders = setupCORSHeaders(responseHeaders);
-
                 return new Response(
-                    "PageToMark CORS Proxy\n\n" +
-                    "Usage:\n" +
-                    originUrl.origin + "/?target_url\n\n" +
-                    "Example:\n" +
-                    originUrl.origin + "/?https://example.com\n",
+                    "Access Denied",
                     {
-                        status: 200,
-                        headers: responseHeaders
+                        status: 403,
+                        statusText: 'Forbidden'
                     }
                 );
             }
-        } else {
+        } catch (error) {
             return new Response(
-                "Access Denied",
+                `Error: ${error.message}\nStack: ${error.stack}`,
                 {
-                    status: 403,
-                    statusText: 'Forbidden'
+                    status: 500,
+                    headers: {
+                        'Content-Type': 'text/plain',
+                        'Access-Control-Allow-Origin': '*'
+                    }
                 }
             );
         }
-    })());
-});
+    }
+};
